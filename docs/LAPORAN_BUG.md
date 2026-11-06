@@ -27,6 +27,46 @@ Test bawaan `tests/test_lexer.py::test_keyword_huruf_kecil` juga ikut lulus.
 
 **Peran AI.** AI membantu menemukan lokasi bug dari output pytest dan potongan `_word`, serta mengusulkan perbaikannya. Verifikasi: menjalankan ulang pytest, memastikan `test_keyword_huruf_kecil` dan test regresi di atas lulus, dan memeriksa bahwa isi `KEYWORDS` memang huruf besar semua.
 
+## Bug 2: Operator `<>` Terpecah Menjadi `<` dan `>`
+
+**Ditemukan oleh:** Ahmad Bukhori · **Diperbaiki oleh:** Ahmad Bukhori
+
+**Gejala.** `analyze_source` pada `data/laporan_penjualan.sql` menghasilkan satu
+`ParseError`: `Baris 6, kolom 41: diharapkan ekspresi, ditemukan '>'`, dan daftar
+`statements` kosong, sehingga `test_matrix_laporan_penjualan` gagal. Menurut
+SPESIFIKASI.md §2.5, lexer harus mengambil operator terpanjang yang cocok, jadi `<>` harus
+menjadi satu token `OP` bernilai `<>`, bukan `<` lalu `>`.
+
+**Reproduksi minimal.** SQL terpendek yang memicu bug:
+
+```sql
+SELECT * FROM t WHERE a <> 1
+```
+
+**Akar masalah.** Di `crud/lexer.py`, cabang `ch == "<"` di `_scan_token` hanya memeriksa
+`=` setelah `<`, sehingga hanya `<=` yang dikenali. Pada `<>`, lexer menghasilkan token
+`<` lalu token `>`. Parser menerima `<` sebagai operator perbandingan, lalu menemukan `>`
+di tempat yang seharusnya ekspresi. Aturan yang dilanggar: maximal munch (§2.5).
+
+**Perbaikan.** File `crud/lexer.py`, fungsi `Lexer._scan_token`, cabang `<`. Setelah
+`<`, lexer memeriksa `=` (menjadi `<=`), lalu `>` (menjadi `<>`), dan jika tidak ada
+keduanya tetap `<`. Cabang operator lain (`>=`, `!=`) ikut diperiksa agar konsisten.
+Alternatif yang dipertimbangkan: menggabungkan token `<` dan `>` yang berurutan di
+parser. Tidak dipilih karena tanggung jawab itu milik lexer menurut §2.5, dan cara itu
+akan menerima `< >` (dengan spasi) sebagai `<>`, padahal itu dua token terpisah dan
+seharusnya error.
+
+**Test regresi.** `test_operator_terpanjang` dan `test_not_equal_diparse` di
+`tests/test_tambahan.py` (gagal sebelum perbaikan, lulus sesudahnya):
+
+`test_matrix_laporan_penjualan` juga diharapkan ikut lulus, kecuali ada penyebab lain di
+file datanya.
+
+**Peran AI.** AI membantu menghubungkan pesan error `ditemukan '>'` dengan penyebabnya
+dari potongan kode cabang `<`, dan mengusulkan perbaikannya. Verifikasi: menjalankan
+ulang pytest, memastikan test regresi lulus, dan memeriksa baris 6 pada
+`laporan_penjualan.sql` memang memuat `<>`.
+
 ## Bug ?: Judul Singkat
 
 **Ditemukan oleh:** Siapa · **Diperbaiki oleh:** Siapa
