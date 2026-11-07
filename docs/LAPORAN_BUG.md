@@ -93,6 +93,28 @@ SELECT 'O''Brien' FROM t;
 
 ---
 
+## Bug 4: AND dan OR Berada di Tingkat Presedensi yang Sama
+
+**Ditemukan oleh:** Gebby Rizki Aditya · **Diperbaiki oleh:** Gebby Rizki Aditya
+
+**Gejala.** `a = 1 OR b = 2 AND c = 3` di-parse sebagai `(a = 1 OR b = 2) AND c = 3`. Menurut SPESIFIKASI.md §3.1, AND lebih kuat dari OR, jadi yang benar adalah `a = 1 OR (b = 2 AND c = 3)`. Bug ini tidak mengubah CRUD matrix, tetapi AST-nya salah.
+
+**Reproduksi minimal.**
+
+```sql
+SELECT x FROM t WHERE a = 1 OR b = 2 AND c = 3;
+```
+
+**Akar masalah.** `Parser._logical` memproses `AND` dan `OR` dalam satu loop, sehingga keduanya setara dan asosiatif kiri. Dalam parser recursive descent, presedensi dinyatakan oleh struktur pemanggilan: satu fungsi per tingkat, dan tingkat yang lebih lemah memanggil tingkat yang lebih kuat (*Crafting Interpreters* bab 6, bagian ekspresi dan presedensi). Menggabungkan dua tingkat menghilangkan informasi itu.
+
+**Perbaikan.** `crud/parser.py`: `_logical` dipecah menjadi `_or` (memanggil `_and`) dan `_and` (memanggil `_not`). Alternatif: precedence climbing dengan tabel prioritas; tidak dipilih agar struktur kode tetap sejajar satu-satu dengan grammar di spesifikasi.
+
+**Test regresi.** `test_bug4_and_lebih_kuat_dari_or` dan `test_bug4_or_asosiatif_kiri_dan_and_tetap_lebih_kuat`, keduanya gagal sebelum perbaikan dan lulus sesudahnya.
+
+**Peran AI.** AI membantu menunjukkan lokasi bug dan mengusulkan perbaikan. Kami memasang test lebih dulu (gagal pada kode asli), memasang perbaikan, lalu menjalankan seluruh test.
+
+---
+
 ## Bug ?: Judul Singkat
 
 **Ditemukan oleh:** Siapa · **Diperbaiki oleh:** Siapa
