@@ -137,6 +137,28 @@ SELECT FROM a; SELECT x FROM b;
 
 ---
 
+## Bug 6: `LEFT OUTER JOIN` Ditolak
+
+**Ditemukan oleh:** Gebby Rizki Aditya · **Diperbaiki oleh:** Ahmad Bukhori
+
+**Gejala.** `LEFT OUTER JOIN` menghasilkan `diharapkan JOIN, ditemukan 'OUTER'`. Grammar di SPESIFIKASI.md §3 menyatakan `join = [ "INNER" | "LEFT" [ "OUTER" ] ] "JOIN" ...`, jadi `OUTER` seharusnya diterima.
+
+**Reproduksi minimal.**
+
+```sql
+SELECT a.id FROM a LEFT OUTER JOIN b ON b.a_id = a.id;
+```
+
+**Akar masalah.** `Parser._join` tidak mengikuti grammar: bagian opsional `[ "OUTER" ]` tidak ada. Parser recursive descent menulis satu fungsi per aturan grammar, sehingga fungsi harus menerima persis yang diterima aturannya (*Crafting Interpreters* bab 5 dan 6).
+
+**Perbaikan.** `crud/parser.py`, `_join`: setelah `LEFT`, panggil `_match_kw("OUTER")`. Alternatif: melewati `OUTER` di mana saja; ditolak karena menerima lebih banyak dari grammar.
+
+**Test regresi.** `test_bug6_left_outer_join_diterima` (gagal sebelum perbaikan, lulus sesudahnya) dan `test_bug6_join_biasa_tetap_diterima` (penjaga untuk `JOIN`, `INNER JOIN`, `LEFT JOIN`).
+
+**Peran AI.** AI membantu menunjukkan lokasi bug dan mengusulkan perbaikan. Kami memasang test lebih dulu (gagal pada kode asli), memasang perbaikan, lalu menjalankan seluruh test.
+
+---
+
 
 ## Bug ?: Judul Singkat
 

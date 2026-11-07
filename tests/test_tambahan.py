@@ -89,3 +89,13 @@ def test_bug5_dua_statement_rusak_menghasilkan_dua_error():
     assert len(script.errors) == 2
     assert [type(s).__name__ for s in script.statements] == ["Select", "Delete"]
 
+# ---- Bug 6: LEFT OUTER JOIN ditolak (spesifikasi 3, aturan join) ------------
+
+def test_bug6_left_outer_join_diterima():
+    s = one("SELECT a.id FROM a LEFT OUTER JOIN b ON b.a_id = a.id")
+    assert s.joins[0].kind == "LEFT"
+
+
+def test_bug6_join_biasa_tetap_diterima():
+    for jenis in ["JOIN", "INNER JOIN", "LEFT JOIN"]:
+        one(f"SELECT a.id FROM a {jenis} b ON b.a_id = a.id")
