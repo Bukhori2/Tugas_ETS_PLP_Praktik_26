@@ -8,9 +8,11 @@ Isi dengan:
 
 """Test regresi untuk bug #1: keyword case-insensitive"""
 import pytest
+from crud import ast_nodes as ast
+from crud.analyzer import analyze_statement
 from crud.lexer import tokenize, LexError, TokenType as T
 from crud.parser import parse_sql
-from crud.pipeline import analyze_source
+from crud.resolver import Resolver
 
 def one(sql):
     script = parse_sql(sql)
@@ -18,6 +20,14 @@ def one(sql):
     assert len(script.statements) == 1
     return script.statements[0]
 
+def resolve(sql):
+    script = parse_sql(sql)
+    assert script.errors == [], script.errors
+    return script, Resolver().resolve_script(script)
+
+
+def colrefs(node):
+    return [n for n in ast.iter_nodes(node) if isinstance(n, ast.ColumnRef)]
 
 
 # ---- Bug 1: keyword peka huruf besar/kecil (spesifikasi 2.2) ---------------
@@ -131,3 +141,60 @@ def test_t2_kolom_ambigu_menghasilkan_warning():
     assert [d.level for d in diags] == ["warning"]
     assert "ambigu tanpa skema" in diags[0].message
 
+# ---- Bug 8: scope DELETE tidak di-pop (spesifikasi 4.5) ---------------------
+
+def test_bug8_alias_delete_tidak_bocor_ke_statement_berikutnya():
+    _, diags = resolve("DELETE FROM sesi s WHERE s.id = 1; SELECT s.id FROM pengguna u")
+    assert [d.level for d in diags] == ["error"]
+    assert "'s'" in diags[0].message
+
+
+def test_bug8_alias_select_tidak_bocor_ke_statement_berikutnya():
+    _, diags = resolve("SELECT p.id FROM pelanggan p; SELECT p.id FROM pesanan o")
+    assert [d.level for d in diags] == ["error"]
+
+# ---- Bug 9: subquery di UPDATE ditandai U (spesifikasi 5) -------------------
+
+def test_bug9_subquery_di_update_dihitung_read():
+    sql = "UPDATE a SET x = (SELECT y FROM b) WHERE z IN (SELECT q FROM c)"
+    assert analyze_statement(one(sql)) == {"a": {"U"}, "b": {"R"}, "c": {"R"}}
+
+
+def test_bug9_subquery_di_delete_tetap_read():
+    sql = "DELETE FROM a WHERE x IN (SELECT y FROM b)"
+    assert analyze_statement(one(sql)) == {"a": {"D"}, "b": {"R"}}
+
+
+# ---- Lima test kasus tepi ---------------------------------------------------
+
+def test_tepi1_komentar_blok_berisi_bintang():
+    # Berisiko: pencari penutup yang naif berhenti di '*' pertama, atau menganggap '/*'
+    # di dalam komentar membuka komentar bersarang.
+    toks = tokenize("/* a * b ** / /* c */ SELECT")
+    assert [t.value for t in toks if t.type != T.EOF] == ["SELECT"]
+
+
+def test_tepi2_and_di_between_milik_between():
+    # Berisiko: AND di BETWEEN bisa dikira AND logika (batas atas harus additive, bukan expr).
+    where = one("SELECT x FROM t WHERE a BETWEEN 1 AND 5 AND b = 2").where
+    assert where.op == "AND"
+    assert isinstance(where.left, ast.Between)
+
+
+def test_tepi3_not_lebih_lemah_dari_perbandingan():
+    # Berisiko: NOT yang diikat terlalu kuat menjadi (NOT a) = 1.
+    where = one("SELECT x FROM t WHERE NOT a = 1 AND b = 2").where
+    assert where.op == "AND"
+    assert where.left.op == "NOT" and where.left.operand.op == "="
+
+
+def test_tepi4_subquery_di_from_tidak_melihat_tabel_saudaranya():
+    # Berisiko: bila di-resolve setelah scope luar dibuat, alias 't' bocor ke dalam (spesifikasi 4.4).
+    _, diags = resolve("SELECT d.z FROM t JOIN (SELECT t.z FROM u) d ON 1 = 1")
+    assert any(d.level == "error" and "'t'" in d.message for d in diags)
+
+
+def test_tepi5_subquery_di_from_tanpa_alias_menghasilkan_warning():
+    # Berisiko: subquery tanpa alias tidak bisa dirujuk dan tidak boleh diam-diam diterima.
+    _, diags = resolve("SELECT 1 FROM (SELECT 1 FROM t)")
+    assert [d.level for d in diags] == ["warning"]

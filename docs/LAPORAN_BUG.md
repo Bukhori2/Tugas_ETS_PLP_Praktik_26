@@ -182,28 +182,45 @@ WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x);
 
 ---
 
-## Bug ?: Judul Singkat
+## Bug 8: Scope DELETE Tidak Di-pop
 
-**Ditemukan oleh:** Siapa · **Diperbaiki oleh:** Siapa
+**Ditemukan oleh:** Ahmad Bukhori · **Diperbaiki oleh:** Ahmad Bukhori
 
-**Gejala.** Input, output yang didapat, dan output yang diharapkan menurut SPESIFIKASI.md
-(sebutkan bagiannya).
+**Gejala.** Alias dari `DELETE` terlihat oleh statement berikutnya. Di `audit.sql`, `DELETE FROM sesi s ...` (baris 16) membuat `s.id` di baris 18 ter-resolve ke `sesi`, padahal seharusnya error `alias 's' tidak terdefinisi`. SPESIFIKASI.md §4.5: setiap statement berdiri sendiri.
 
-**Reproduksi minimal.** SQL terpendek yang memicu bug:
+**Reproduksi minimal.**
 
 ```sql
-
+DELETE FROM sesi s WHERE s.id = 1;
+SELECT s.id FROM pengguna u;
 ```
 
-**Akar masalah.** Mengapa kode lama salah? Konsep apa yang dilanggar?
+**Akar masalah.** `Resolver._delete` memanggil `_push` tetapi tidak pernah `_pop`. Resolver adalah mesin berstack: setiap `beginScope` harus berpasangan dengan `endScope` (*Crafting Interpreters* bab 11, bagian scope). Karena scope DELETE tidak ditutup, statement berikutnya mewarisinya sebagai induk.
 
-**Perbaikan.** File dan fungsi yang diubah, serta alasannya. Sebutkan juga perbaikan
-alternatif yang kalian pertimbangkan dan alasan tidak memilihnya.
+**Perbaikan.** `crud/resolver.py`: tambah `self._pop()` di akhir `_delete`, dan reset `self.scope = None` di awal tiap statement di `resolve_script` sebagai pengaman. Alternatif: membungkus push/pop dengan `try/finally`; tidak dipilih karena hanya ada tiga tempat pemakaian.
 
-**Test regresi.** Nama test di `tests/test_tambahan.py` yang gagal sebelum perbaikan dan lulus
-sesudahnya.
+**Test regresi.** `test_bug8_alias_delete_tidak_bocor_ke_statement_berikutnya` (gagal sebelum perbaikan, lulus sesudahnya) dan `test_bug8_alias_select_tidak_bocor_ke_statement_berikutnya` (penjaga untuk SELECT).
 
-**Peran AI.** Apakah AI membantu menemukan atau memperbaiki bug ini? Bagaimana kalian
-memverifikasinya?
+**Peran AI.** AI membantu menunjukkan lokasi bug dan mengusulkan perbaikan. Kami memasang test lebih dulu (gagal pada kode asli), memasang perbaikan, lalu menjalankan seluruh test.
 
 ---
+
+## Bug 9: Subquery di UPDATE Ditandai U, Bukan R
+
+**Ditemukan oleh:** Gebby Rizki Aditya · **Diperbaiki oleh:** Ahmad Bukhori
+
+**Gejala.** `UPDATE a SET x = (SELECT y FROM b) ...` menghasilkan `b: U`. Menurut SPESIFIKASI.md §5, membaca tabel lewat subquery selalu R. Akibatnya matrix `laporan_penjualan.sql` memberi `pesanan = RUD`, seharusnya `RD`.
+
+**Reproduksi minimal.**
+
+```sql
+UPDATE a SET x = (SELECT y FROM b) WHERE z IN (SELECT q FROM c);
+```
+
+**Akar masalah.** `analyze_statement` meneruskan operasi statement luar (`"U"`) ke `_collect` untuk subquery di `SET` dan `WHERE`. Operasi CRUD adalah peran tabel (target atau sumber), bukan sifat seluruh pohon. Analyzer berjalan di atas AST (*Crafting Interpreters* bab 5, node dan traversal), jadi peran harus diputuskan per node.
+
+**Perbaikan.** `crud/analyzer.py`: `_collect(..., "R")` untuk `SET` dan `WHERE` pada UPDATE. Alternatif: menandai tabel target dulu, lalu semua sisanya otomatis R; tidak dipilih agar perubahan minimal dan sejalan dengan cabang DELETE yang sudah benar.
+
+**Test regresi.** `test_bug9_subquery_di_update_dihitung_read` (gagal sebelum perbaikan, lulus sesudahnya) dan `test_bug9_subquery_di_delete_tetap_read` (penjaga). Test bawaan `test_matrix_laporan_penjualan` juga ikut lulus.
+
+**Peran AI.** AI membantu menunjukkan lokasi bug dan mengusulkan perbaikan. Kami memasang test lebih dulu (gagal pada kode asli), memasang perbaikan, lalu menjalankan seluruh test.
