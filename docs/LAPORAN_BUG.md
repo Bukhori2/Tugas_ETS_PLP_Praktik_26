@@ -159,6 +159,28 @@ SELECT a.id FROM a LEFT OUTER JOIN b ON b.a_id = a.id;
 
 ---
 
+## Bug 7: Pencarian Alias Dimulai dari Scope Terluar
+
+**Ditemukan oleh:** Gebby Rizki Aditya · **Diperbaiki oleh:** Gebby Rizki Aditya
+
+**Gejala.** Alias yang sama di subquery dan query luar di-resolve ke tabel luar. Pada `audit.sql` baris 14, `x.pelanggan_id` di subquery di-resolve ke `pelanggan`, padahal seharusnya `pesanan`. Menurut SPESIFIKASI.md §4.3, qualifier dicari dari scope terdalam ke luar.
+
+**Reproduksi minimal.**
+
+```sql
+SELECT x.id FROM pelanggan x
+WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x);
+```
+
+**Akar masalah.** `Resolver._lookup` mengumpulkan rantai scope dari dalam ke luar, lalu memakai `reversed(chain)`, sehingga scope terluar dicek pertama. Resolver mencari variabel dengan berjalan dari scope terdalam ke luar (*Crafting Interpreters* bab 11, bagian resolving variable expressions); urutan terbalik menghilangkan shadowing.
+
+**Perbaikan.** `crud/resolver.py`, `_lookup`: telusuri `scope` lalu `scope.parent` secara langsung dan kembalikan hasil pertama. Alternatif: tetap membangun list tanpa `reversed`; hasilnya sama, tetapi menelusuri parent langsung lebih sederhana.
+
+**Test regresi.** `test_bug7_alias_subquery_menutupi_alias_luar` (gagal sebelum perbaikan, lulus sesudahnya) dan `test_bug7_subquery_tetap_bisa_merujuk_alias_luar` (penjaga untuk correlated subquery).
+
+**Peran AI.** AI membantu menunjukkan lokasi bug dan mengusulkan perbaikan. Kami memasang test lebih dulu (gagal pada kode asli), memasang perbaikan, lalu menjalankan seluruh test.
+
+---
 
 ## Bug ?: Judul Singkat
 

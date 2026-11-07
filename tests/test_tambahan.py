@@ -99,3 +99,35 @@ def test_bug6_left_outer_join_diterima():
 def test_bug6_join_biasa_tetap_diterima():
     for jenis in ["JOIN", "INNER JOIN", "LEFT JOIN"]:
         one(f"SELECT a.id FROM a {jenis} b ON b.a_id = a.id")
+
+
+# ---- Bug 7: pencarian alias dari scope terluar (spesifikasi 4.3) ------------
+
+def test_bug7_alias_subquery_menutupi_alias_luar():
+    script, diags = resolve(
+        "SELECT x.id FROM pelanggan x WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x)")
+    dalam = [c for c in colrefs(script) if c.name == "pelanggan_id"][0]
+    assert dalam.resolved == "pesanan"
+    assert diags == []
+
+
+def test_bug7_subquery_tetap_bisa_merujuk_alias_luar():
+    script, diags = resolve(
+        "SELECT p.id FROM pelanggan p WHERE EXISTS "
+        "(SELECT 1 FROM pesanan o WHERE o.pelanggan_id = p.id)")
+    assert all(c.resolved for c in colrefs(script))
+    assert diags == []
+
+# ---- TODO T2: kolom tanpa qualifier (spesifikasi 4.3) -----------------------
+
+def test_t2_kolom_satu_tabel_di_resolve():
+    script, _ = resolve("SELECT nama FROM pelanggan")
+    assert colrefs(script)[0].resolved == "pelanggan"
+
+
+def test_t2_kolom_ambigu_menghasilkan_warning():
+    script, diags = resolve("SELECT nama FROM pelanggan p, pesanan o")
+    assert colrefs(script)[0].resolved is None
+    assert [d.level for d in diags] == ["warning"]
+    assert "ambigu tanpa skema" in diags[0].message
+

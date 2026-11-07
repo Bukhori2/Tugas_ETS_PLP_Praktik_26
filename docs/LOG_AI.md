@@ -10,6 +10,8 @@ Catat setiap penggunaan AI atau coding agent yang memengaruhi kode atau laporan.
 | 4 | Gebby Rizki Aditya | Meminta AI mencari penyebab presedensi AND/OR salah dan usulan perbaikan (bug 4). | Diterima | Sesuai tabel presedensi 3.1 | Test dipasang dulu (gagal), perbaikan dipasang (lulus), lalu seluruh test dijalankan |
 | 5 | Gebby Rizki Aditya | Meminta AI mencari penyebab statement setelah error hilang dan usulan perbaikan (bug 5). | Diterima | Sesuai aturan error recovery 6 | Test dipasang dulu (gagal), perbaikan dipasang (lulus), lalu seluruh test dijalankan |
 | 6 | Ahmad Bukhori | Meminta AI mencari penyebab statement `LEFT OUTER JOIN` ditolak dan usulan perbaikan (bug 6). | Diterima | Sesuai aturan error recovery 6 | Test dipasang dulu (gagal), perbaikan dipasang (lulus), lalu seluruh test dijalankan |
+| 7 | Gebby Rizki Aditya | Meminta AI mencari penyebab alias subquery salah resolve dan usulan perbaikan (bug 7). | Diterima | Sesuai aturan resolusi 4.3 | Test dipasang dulu (gagal), perbaikan dipasang (lulus), lalu seluruh test dijalankan |
+
 
 **Refleksi (3-5 kalimat).** Di bagian mana AI paling membantu? Di mana AI keliru atau
 menyesatkan, dan bagaimana kalian mengetahuinya?
