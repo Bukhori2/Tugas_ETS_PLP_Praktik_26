@@ -8,10 +8,9 @@ Isi dengan:
 
 """Test regresi untuk bug #1: keyword case-insensitive"""
 import pytest
-
-from crud.lexer import tokenize, TokenType as T
-from crud.lexer import LexError
+from crud.lexer import tokenize, LexError, TokenType as T
 from crud.parser import parse_sql
+from crud.pipeline import analyze_source
 
 def one(sql):
     script = parse_sql(sql)
