@@ -115,6 +115,29 @@ SELECT x FROM t WHERE a = 1 OR b = 2 AND c = 3;
 
 ---
 
+## Bug 5: Error Recovery Membuang Seluruh Sisa File
+
+**Ditemukan oleh:** Ahmad Bukhori · **Diperbaiki oleh:** Gebby Rizki Aditya
+
+**Gejala.** Setelah satu error sintaks, semua statement sesudahnya hilang. Menurut SPESIFIKASI.md §6, parser harus membuang token sampai dan termasuk `;` berikutnya, lalu melanjutkan, sehingga statement valid sesudahnya tetap diproses. Pada `campuran_error.sql`, `UPDATE` dan `DELETE` setelah baris 4 tidak dihitung.
+
+**Reproduksi minimal.**
+
+```sql
+SELECT FROM a; SELECT x FROM b;
+```
+
+**Akar masalah.** `Parser._synchronize` memakai loop sampai akhir input, padahal titik sinkronisasi seharusnya batas statement (`;`). Panic mode (*Crafting Interpreters* bab 6, bagian error recovery dan sinkronisasi) hanya berhasil bila parser berhenti membuang token di titik aman agar parsing bisa dilanjutkan.
+
+**Perbaikan.** `crud/parser.py`, `_synchronize`: berhenti setelah mengonsumsi token `SEMICOLON`. Alternatif: berhenti di keyword awal statement berikutnya; ditolak karena `SELECT` juga muncul di dalam subquery, sehingga bisa salah sinkron.
+
+**Test regresi.** `test_bug5_statement_valid_setelah_error_tetap_diproses` dan `test_bug5_dua_statement_rusak_menghasilkan_dua_error`, keduanya gagal sebelum perbaikan dan lulus sesudahnya.
+
+**Peran AI.** AI membantu menunjukkan lokasi bug dan mengusulkan perbaikan. Kami memasang test lebih dulu (gagal pada kode asli), memasang perbaikan, lalu menjalankan seluruh test.
+
+---
+
+
 ## Bug ?: Judul Singkat
 
 **Ditemukan oleh:** Siapa · **Diperbaiki oleh:** Siapa

@@ -76,3 +76,17 @@ def test_bug4_or_asosiatif_kiri_dan_and_tetap_lebih_kuat():
     where = one("SELECT x FROM t WHERE a = 1 OR b = 2 AND c = 3 OR d = 4").where
     assert where.op == "OR" and where.left.op == "OR"
     assert where.left.right.op == "AND"
+
+# ---- Bug 5: error recovery membuang sisa file (spesifikasi 6) ---------------
+
+def test_bug5_statement_valid_setelah_error_tetap_diproses():
+    script = parse_sql("SELECT FROM a; SELECT x FROM b; UPDATE c SET y = 1;")
+    assert len(script.errors) == 1
+    assert [type(s).__name__ for s in script.statements] == ["Select", "Update"]
+
+
+def test_bug5_dua_statement_rusak_menghasilkan_dua_error():
+    script = parse_sql("SELECT FROM a; SELECT x FROM b; DELETE t; DELETE FROM c")
+    assert len(script.errors) == 2
+    assert [type(s).__name__ for s in script.statements] == ["Select", "Delete"]
+
