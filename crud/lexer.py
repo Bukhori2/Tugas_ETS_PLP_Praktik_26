@@ -115,6 +115,7 @@ class Lexer:
                     self._advance()  # lewati /
                     return
                 self._advance()
+            raise LexError("komentar blok tidak ditutup", line, col)
         if ch in _SINGLE:
             self._add(_SINGLE[ch], ch, line, col)
             return
